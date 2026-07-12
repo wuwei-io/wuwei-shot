@@ -174,21 +174,15 @@ namespace SnipTool
         readonly Rectangle[] _rects = new Rectangle[7];
         const int BTN = 42;
 
-        // 文字标注：完全自绘（透明背景 + 红字无阴影 + 红色光标）；
-        // 中文靠系统 IME 提交后的 WM_CHAR 进来，用 IME 定位让候选框跟着光标走。
+        // 文字标注：用真输入框（保证中文输入法可用），但把它背后的冻结原图
+        // 画成自己的背景 => 看起来完全透明；配合红字、红光标。
         static readonly Font AnnoFont = new Font("Microsoft YaHei", 13.5f);
-        bool _typing = false;
-        Point _textPos;
-        readonly System.Text.StringBuilder _text = new System.Text.StringBuilder();
-        bool _caretOn = true;
-        Timer _caretTimer;
+        ClearTextBox _tb = null;
 
-        [DllImport("imm32.dll")] static extern IntPtr ImmGetContext(IntPtr hWnd);
-        [DllImport("imm32.dll")] static extern bool ImmSetCompositionWindow(IntPtr hIMC, ref COMPOSITIONFORM lpCompForm);
-        [DllImport("imm32.dll")] static extern bool ImmReleaseContext(IntPtr hWnd, IntPtr hIMC);
-        [StructLayout(LayoutKind.Sequential)] struct POINTS { public int x, y; }
-        [StructLayout(LayoutKind.Sequential)] struct RECTS { public int left, top, right, bottom; }
-        [StructLayout(LayoutKind.Sequential)] struct COMPOSITIONFORM { public int dwStyle; public POINTS ptCurrentPos; public RECTS rcArea; }
+        const int WM_CTLCOLOREDIT = 0x0133;
+        [DllImport("gdi32.dll")] static extern int SetBkMode(IntPtr hdc, int mode);
+        [DllImport("gdi32.dll")] static extern uint SetTextColor(IntPtr hdc, int color);
+        [DllImport("gdi32.dll")] static extern IntPtr GetStockObject(int i);
 
         // 暖琥珀 VI
         static readonly Color C_GOLD   = Color.FromArgb(0xf4, 0xb7, 0x40);
@@ -217,17 +211,26 @@ namespace SnipTool
             this.MouseMove += OnMove;
             this.MouseUp += OnUp;
             this.KeyDown += OnKey;
-            this.KeyPress += OnKeyPress;
+        }
 
-            _caretTimer = new Timer();
-            _caretTimer.Interval = 530;
-            _caretTimer.Tick += (a, b) => { if (_typing) { _caretOn = !_caretOn; InvalidateText(); } };
+        // 让文字输入框的字背景透明（不盖住我们画上去的原图背景），并把字设成红色
+        protected override void WndProc(ref Message m)
+        {
+            if (m.Msg == WM_CTLCOLOREDIT)
+            {
+                SetBkMode(m.WParam, 1);                 // TRANSPARENT
+                int bgr = C_ANNO.R | (C_ANNO.G << 8) | (C_ANNO.B << 16);
+                SetTextColor(m.WParam, bgr);
+                m.Result = GetStockObject(5);           // NULL_BRUSH
+                return;
+            }
+            base.WndProc(ref m);
         }
 
         void OnKey(object s, KeyEventArgs e)
         {
-            // 正在打字：Enter 提交、Esc 取消这段文字，其它键交给 OnKeyPress
-            if (_typing)
+            // 正在打字：Enter 提交、Esc 取消这段文字，其它键交给输入框
+            if (_tb != null)
             {
                 if (e.KeyCode == Keys.Escape) { CancelText(); e.SuppressKeyPress = true; }
                 else if (e.KeyCode == Keys.Enter) { CommitText(); e.SuppressKeyPress = true; }
@@ -255,7 +258,7 @@ namespace SnipTool
             if (e.Button != MouseButtons.Left) return;
 
             // 点击别处先把正在输入的文字落定
-            if (_typing) CommitText();
+            if (_tb != null) CommitText();
 
             if (_hasSel)
             {
@@ -367,76 +370,55 @@ namespace SnipTool
                 _rects[i] = new Rectangle(bx + i * BTN, by, BTN, BTN);
         }
 
-        // ---- 文字标注输入（自绘，无控件）----
+        // ---- 文字标注输入（真控件 + 透明背景 + 红光标）----
         void BeginText(Point p)
         {
             CommitText();
-            _typing = true;
-            _textPos = p;
-            _text.Length = 0;
-            _caretOn = true;
-            this.ImeMode = ImeMode.On;   // 允许中文输入法
-            _caretTimer.Start();
-            SetImePos(p.X, p.Y);
-            this.Invalidate();
+            _tb = new ClearTextBox();
+            _tb.BorderStyle = BorderStyle.None;
+            _tb.Multiline = false;
+            _tb.Font = AnnoFont;
+            _tb.ForeColor = C_ANNO;
+            _tb.Location = p;
+            _tb.Width = Math.Min(320, Math.Max(60, _sel.Right - p.X - 4));
+            this.Controls.Add(_tb);
+
+            // 把输入框背后的冻结原图截下来当它的背景 => 视觉上完全透明
+            int h = _tb.Height;
+            Rectangle rb = new Rectangle(p.X, p.Y, _tb.Width, h);
+            rb.Intersect(new Rectangle(0, 0, _full.Width, _full.Height));
+            if (rb.Width > 0 && rb.Height > 0)
+            {
+                var bg = new Bitmap(_tb.Width, h);
+                using (var g = Graphics.FromImage(bg))
+                    g.DrawImage(_full, new Rectangle(0, 0, rb.Width, rb.Height), rb, GraphicsUnit.Pixel);
+                _tb.Bg = bg;
+            }
+            _tb.Focus();
         }
 
         void CommitText()
         {
-            if (!_typing) return;
-            _typing = false;
-            _caretTimer.Stop();
-            this.ImeMode = ImeMode.NoControl;
-            string t = _text.ToString();
-            if (t.Trim().Length > 0)
-                _annos.Add(new Anno { Type = Tool.Text, A = _textPos, Text = t });
-            _text.Length = 0;
+            if (_tb == null) return;
+            var tb = _tb; _tb = null;               // 先置空，避免重入
+            string txt = tb.Text;
+            Point pos = tb.Location;
+            this.Controls.Remove(tb);
+            tb.Dispose();
+            if (!string.IsNullOrEmpty(txt) && txt.Trim().Length > 0)
+                _annos.Add(new Anno { Type = Tool.Text, A = pos, Text = txt });
+            this.Focus();
             this.Invalidate();
         }
 
         void CancelText()
         {
-            if (!_typing) return;
-            _typing = false;
-            _caretTimer.Stop();
-            this.ImeMode = ImeMode.NoControl;
-            _text.Length = 0;
+            if (_tb == null) return;
+            var tb = _tb; _tb = null;
+            this.Controls.Remove(tb);
+            tb.Dispose();
+            this.Focus();
             this.Invalidate();
-        }
-
-        void OnKeyPress(object s, KeyPressEventArgs e)
-        {
-            if (!_typing) return;
-            char c = e.KeyChar;
-            if (c == '\b') { if (_text.Length > 0) _text.Remove(_text.Length - 1, 1); }
-            else if (c == '\r' || c == '\n' || c == (char)27) { /* Enter/Esc 在 OnKey 里处理 */ }
-            else if (!char.IsControl(c)) { _text.Append(c); }
-            e.Handled = true;
-            using (var g = this.CreateGraphics())
-                SetImePos((int)(_textPos.X + Measure(g, _text.ToString())), _textPos.Y);
-            this.Invalidate();
-        }
-
-        float Measure(Graphics g, string t)
-        {
-            if (string.IsNullOrEmpty(t)) return 0;
-            return g.MeasureString(t, AnnoFont, int.MaxValue, StringFormat.GenericTypographic).Width;
-        }
-
-        void SetImePos(int x, int y)
-        {
-            IntPtr himc = ImmGetContext(this.Handle);
-            if (himc == IntPtr.Zero) return;
-            var cf = new COMPOSITIONFORM();
-            cf.dwStyle = 0x0002; // CFS_POINT
-            cf.ptCurrentPos = new POINTS { x = x, y = y };
-            ImmSetCompositionWindow(himc, ref cf);
-            ImmReleaseContext(this.Handle, himc);
-        }
-
-        void InvalidateText()
-        {
-            this.Invalidate(new Rectangle(_textPos.X - 2, _textPos.Y - 2, 720, AnnoFont.Height + 8));
         }
 
         void Confirm()
@@ -495,7 +477,6 @@ namespace SnipTool
                 g.SetClip(_sel);
                 foreach (var a in _annos) DrawAnno(g, a);
                 if (_annotating && _drawing != null) DrawAnno(g, _drawing);
-                if (_typing) DrawTyping(g);
                 g.Clip = oldClip;
 
                 // 尺寸仅在拖动时显示（精简）
@@ -608,19 +589,6 @@ namespace SnipTool
                 // 纯红字，无阴影，越简洁越好
                 using (var br = new SolidBrush(C_ANNO))
                     g.DrawString(a.Text, AnnoFont, br, a.A.X, a.A.Y, StringFormat.GenericTypographic);
-            }
-        }
-
-        void DrawTyping(Graphics g)
-        {
-            string t = _text.ToString();
-            using (var br = new SolidBrush(C_ANNO))
-                g.DrawString(t, AnnoFont, br, _textPos.X, _textPos.Y, StringFormat.GenericTypographic);
-            if (_caretOn)
-            {
-                float cx = _textPos.X + Measure(g, t) + 1;
-                using (var pen = new Pen(C_ANNO, 1.6f))
-                    g.DrawLine(pen, cx, _textPos.Y + 2, cx, _textPos.Y + AnnoFont.Height);
             }
         }
 
@@ -748,6 +716,51 @@ namespace SnipTool
                 outBmp.Save(path, ImageFormat.Png);
             }
             f.Dispose();
+        }
+    }
+
+    // 透明输入框：因为截图是冻结静止的，把它背后那块原图画成自己的背景，
+    // 看起来就完全透明；再配一个红色光标。真控件 => 中文输入法照常工作。
+    class ClearTextBox : TextBox
+    {
+        public Bitmap Bg;
+
+        [DllImport("user32.dll")] static extern bool CreateCaret(IntPtr hWnd, IntPtr hBitmap, int w, int h);
+        [DllImport("user32.dll")] static extern bool ShowCaret(IntPtr hWnd);
+        [DllImport("gdi32.dll")] static extern IntPtr CreateSolidBrush(int color);
+        [DllImport("gdi32.dll")] static extern bool DeleteObject(IntPtr o);
+
+        const int WM_ERASEBKGND = 0x0014;
+        const int WM_SETFOCUS = 0x0007;
+
+        protected override void WndProc(ref Message m)
+        {
+            if (m.Msg == WM_ERASEBKGND && Bg != null)
+            {
+                using (var g = Graphics.FromHdc(m.WParam))
+                    g.DrawImageUnscaled(Bg, 0, 0);
+                m.Result = (IntPtr)1;
+                return;
+            }
+            base.WndProc(ref m);
+            if (m.Msg == WM_SETFOCUS)
+            {
+                // 红色光标：用一个 2px 宽的纯红位图当 caret
+                var bmp = new Bitmap(2, Math.Max(2, this.Font.Height));
+                using (var g = Graphics.FromImage(bmp))
+                    g.Clear(Color.FromArgb(0xfa, 0x51, 0x51));
+                IntPtr hb = bmp.GetHbitmap();
+                CreateCaret(this.Handle, hb, 0, 0);
+                ShowCaret(this.Handle);
+                DeleteObject(hb);
+                bmp.Dispose();
+            }
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing && Bg != null) { Bg.Dispose(); Bg = null; }
+            base.Dispose(disposing);
         }
     }
 }
