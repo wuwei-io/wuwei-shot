@@ -1,0 +1,59 @@
+name: release-cross
+
+# 从单台 Linux 跑机交叉发布全部平台的自包含单文件包，
+# 打成一个预发布 (prerelease) tag=cross-preview。
+on:
+  workflow_dispatch:
+  push:
+    tags: ['cross-v*']
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Publish all platforms
+        run: |
+          set -e
+          for rid in win-x64 osx-arm64 osx-x64 linux-x64; do
+            echo "== publishing $rid =="
+            dotnet publish cross/AltSnip.Desktop.csproj -c Release -r $rid \
+              --self-contained true -p:PublishSingleFile=true \
+              -p:IncludeNativeLibrariesForSelfExtract=true -o out/$rid
+          done
+          mkdir -p dist
+          cp out/win-x64/AltSnip.exe   dist/AltSnip-Windows-x64.exe
+          cp out/osx-arm64/AltSnip     dist/AltSnip-macOS-arm64
+          cp out/osx-x64/AltSnip       dist/AltSnip-macOS-x64
+          cp out/linux-x64/AltSnip     dist/AltSnip-Linux-x64
+          chmod +x dist/AltSnip-macOS-arm64 dist/AltSnip-macOS-x64 dist/AltSnip-Linux-x64
+          ls -lh dist
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: cross-preview
+          target_commitish: cross-platform
+          name: AltSnip — cross-platform preview
+          prerelease: true
+          files: dist/*
+          body: |
+            **Experimental Avalonia rewrite** running on Windows, macOS, and Linux.
+            Feature-complete overlay (select / move-resize / arrow-line-rect-text-mosaic /
+            colors / copy / save-PNG). Tray icon triggers a capture on every OS;
+            the global `Alt + A` hotkey currently works on Windows.
+
+            - **Windows**: download `AltSnip-Windows-x64.exe`, run it (tray icon), press `Alt+A`.
+            - **macOS**: `AltSnip-macOS-arm64` (Apple silicon) / `-x64` (Intel). `chmod +x`,
+              then run; needs Screen Recording permission. Unsigned — right-click ▸ Open.
+            - **Linux**: `AltSnip-Linux-x64`. `chmod +x`, run. Needs `grim`/`scrot` for
+              capture and `wl-copy`/`xclip` for clipboard.
+
+            macOS/Linux builds are not yet tested on real hardware — feedback welcome.
+            The classic tiny Windows build lives in the main releases.
