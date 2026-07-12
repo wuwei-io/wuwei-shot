@@ -1054,6 +1054,22 @@ namespace SnipTool
             }
             f.Dispose();
         }
+
+        // ---- 演示动画（DemoGen 用）：设置状态并抓一帧 ----
+        internal void DemoConfig(Rectangle sel, bool hasSel, bool dragging, Tool tool)
+        {
+            _sel = sel; _hasSel = hasSel; _dragging = dragging; _tool = tool;
+            if (hasSel && !dragging) LayoutButtons();
+        }
+        internal void DemoStyle(Color c, float w) { _color = c; _width = w; if (_hasSel) LayoutButtons(); }
+        internal void DemoHover(int id) { _hover = id; }
+        internal List<Anno> DemoAnnos { get { return _annos; } }
+        internal Bitmap DemoFrame()
+        {
+            var b = new Bitmap(this.Width, this.Height);
+            using (var g = Graphics.FromImage(b)) { g.SmoothingMode = SmoothingMode.AntiAlias; Render(g); }
+            return b;
+        }
     }
 
 }
