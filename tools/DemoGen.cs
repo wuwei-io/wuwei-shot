@@ -10,7 +10,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.IO;
-using System.Runtime.Serialization;
+using System.Text;
 using System.Windows.Forms;
 
 namespace SnipTool
@@ -25,7 +25,7 @@ namespace SnipTool
         [STAThread]
         static void Main(string[] args)
         {
-            string outPath = args.Length > 0 ? args[0] : "demo.gif";
+            string outPath = args.Length > 0 ? args[0] : "demo.png";
             var frames = new List<Bitmap>();
             var delays = new List<int>();   // 单位：厘秒(1/100s)
 
@@ -99,7 +99,7 @@ namespace SnipTool
                 frames.Add(toastFrame); delays.Add(220);
             }
 
-            SaveGif(outPath, frames, delays);
+            SaveApng(outPath, frames, delays);
             Console.WriteLine("Wrote " + outPath + "  (" + frames.Count + " frames)");
             foreach (var b in frames) b.Dispose();
             f.Dispose(); bg.Dispose();
@@ -112,8 +112,9 @@ namespace SnipTool
             using (var g = Graphics.FromImage(b))
             {
                 g.SmoothingMode = SmoothingMode.AntiAlias;
-                // 纯色底（GIF 量化更干净，无噪点）
-                using (var bgb = new SolidBrush(Color.FromArgb(0x1b, 0x20, 0x2b)))
+                // 真彩背景渐变（APNG 无 256 色限制，干净有质感）
+                using (var bgb = new LinearGradientBrush(new Rectangle(0, 0, W, H),
+                    Color.FromArgb(0x2b, 0x34, 0x46), Color.FromArgb(0x12, 0x16, 0x1f), 55f))
                     g.FillRectangle(bgb, 0, 0, W, H);
 
                 Rectangle win = new Rectangle(105, 60, 610, 400);
@@ -202,39 +203,113 @@ namespace SnipTool
             p.AddLine(r.Right, r.Bottom, r.X, r.Bottom); p.CloseFigure(); return p;
         }
 
-        // ---- 动画 GIF（GDI+ 多帧 + 反射设置每帧延时/循环）----
-        static void SaveGif(string path, List<Bitmap> frames, List<int> delaysCs)
+        // ---- 动画 PNG (APNG)：全 24 位真彩，无 256 色限制，高清无噪点 ----
+        static void SaveApng(string path, List<Bitmap> frames, List<int> delaysCs)
         {
-            ImageCodecInfo enc = null;
-            foreach (var c in ImageCodecInfo.GetImageEncoders()) if (c.FormatID == ImageFormat.Gif.Guid) enc = c;
-
-            var epMulti = new EncoderParameters(1);
-            epMulti.Param[0] = new EncoderParameter(Encoder.SaveFlag, (long)EncoderValue.MultiFrame);
-            var epNext = new EncoderParameters(1);
-            epNext.Param[0] = new EncoderParameter(Encoder.SaveFlag, (long)EncoderValue.FrameDimensionTime);
-            var epFlush = new EncoderParameters(1);
-            epFlush.Param[0] = new EncoderParameter(Encoder.SaveFlag, (long)EncoderValue.Flush);
-
-            var first = frames[0];
-            byte[] delayBytes = new byte[4 * frames.Count];
-            for (int i = 0; i < frames.Count; i++)
-                BitConverter.GetBytes(delaysCs[i]).CopyTo(delayBytes, i * 4);
-            first.SetPropertyItem(NewProp(0x5100, 4, delayBytes));      // PropertyTagFrameDelay
-            first.SetPropertyItem(NewProp(0x5101, 3, new byte[] { 0, 0 })); // PropertyTagLoopCount = 无限
+            int W = frames[0].Width, H = frames[0].Height;
+            byte[] ihdr = null;
+            var streams = new List<byte[]>();
+            foreach (var f in frames)
+            {
+                using (var ms = new MemoryStream())
+                {
+                    using (var f24 = f.Clone(new Rectangle(0, 0, W, H), PixelFormat.Format24bppRgb))
+                        f24.Save(ms, ImageFormat.Png);
+                    byte[] png = ms.ToArray();
+                    byte[] ih, idat;
+                    ParsePng(png, out ih, out idat);
+                    if (ihdr == null) ihdr = ih;
+                    streams.Add(idat);
+                }
+            }
 
             using (var fs = File.Create(path))
             {
-                first.Save(fs, enc, epMulti);
-                for (int i = 1; i < frames.Count; i++) first.SaveAdd(frames[i], epNext);
-                first.SaveAdd(epFlush);
+                fs.Write(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }, 0, 8); // PNG 签名
+                WriteChunk(fs, "IHDR", ihdr);
+                WriteChunk(fs, "acTL", AcTL(frames.Count, 0));   // 循环播放
+                int seq = 0;
+                WriteChunk(fs, "fcTL", FcTL(seq++, W, H, delaysCs[0]));
+                WriteChunk(fs, "IDAT", streams[0]);              // 第 0 帧即默认图
+                for (int k = 1; k < frames.Count; k++)
+                {
+                    WriteChunk(fs, "fcTL", FcTL(seq++, W, H, delaysCs[k]));
+                    byte[] fd = new byte[4 + streams[k].Length];
+                    WriteBE(fd, 0, seq++);
+                    Array.Copy(streams[k], 0, fd, 4, streams[k].Length);
+                    WriteChunk(fs, "fdAT", fd);
+                }
+                WriteChunk(fs, "IEND", new byte[0]);
             }
         }
 
-        static PropertyItem NewProp(int id, short type, byte[] value)
+        static void ParsePng(byte[] png, out byte[] ihdr, out byte[] idat)
         {
-            var pi = (PropertyItem)FormatterServices.GetUninitializedObject(typeof(PropertyItem));
-            pi.Id = id; pi.Type = type; pi.Len = value.Length; pi.Value = value;
-            return pi;
+            ihdr = null;
+            var idatMs = new MemoryStream();
+            int p = 8;
+            while (p + 8 <= png.Length)
+            {
+                int len = (png[p] << 24) | (png[p + 1] << 16) | (png[p + 2] << 8) | png[p + 3];
+                string type = Encoding.ASCII.GetString(png, p + 4, 4);
+                int data = p + 8;
+                if (type == "IHDR") { ihdr = new byte[len]; Array.Copy(png, data, ihdr, 0, len); }
+                else if (type == "IDAT") idatMs.Write(png, data, len);
+                p = data + len + 4; // 跳过数据 + CRC
+                if (type == "IEND") break;
+            }
+            idat = idatMs.ToArray();
+        }
+
+        static byte[] AcTL(int frames, int plays)
+        {
+            var b = new byte[8]; WriteBE(b, 0, frames); WriteBE(b, 4, plays); return b;
+        }
+
+        static byte[] FcTL(int seq, int w, int h, int delayCs)
+        {
+            var b = new byte[26];
+            WriteBE(b, 0, seq);
+            WriteBE(b, 4, w); WriteBE(b, 8, h);
+            WriteBE(b, 12, 0); WriteBE(b, 16, 0);   // x/y offset
+            b[20] = (byte)(delayCs >> 8); b[21] = (byte)delayCs;  // delay_num
+            b[22] = 0; b[23] = 100;                 // delay_den = 100 => 单位厘秒
+            b[24] = 0;  // dispose = NONE
+            b[25] = 0;  // blend = SOURCE
+            return b;
+        }
+
+        static void WriteBE(byte[] b, int off, int v)
+        {
+            b[off] = (byte)(v >> 24); b[off + 1] = (byte)(v >> 16); b[off + 2] = (byte)(v >> 8); b[off + 3] = (byte)v;
+        }
+
+        static void WriteChunk(Stream fs, string type, byte[] data)
+        {
+            var len = new byte[4]; WriteBE(len, 0, data.Length); fs.Write(len, 0, 4);
+            var tb = Encoding.ASCII.GetBytes(type);
+            var buf = new byte[4 + data.Length];
+            Array.Copy(tb, 0, buf, 0, 4); Array.Copy(data, 0, buf, 4, data.Length);
+            fs.Write(buf, 0, buf.Length);
+            var crc = new byte[4]; WriteBE(crc, 0, unchecked((int)Crc32(buf))); fs.Write(crc, 0, 4);
+        }
+
+        static uint[] _crc;
+        static uint Crc32(byte[] buf)
+        {
+            if (_crc == null)
+            {
+                _crc = new uint[256];
+                for (uint n = 0; n < 256; n++)
+                {
+                    uint c = n;
+                    for (int k = 0; k < 8; k++) c = ((c & 1) != 0) ? (0xEDB88320u ^ (c >> 1)) : (c >> 1);
+                    _crc[n] = c;
+                }
+            }
+            uint x = 0xffffffff;
+            for (int i = 0; i < buf.Length; i++) x = _crc[(x ^ buf[i]) & 0xff] ^ (x >> 8);
+            return x ^ 0xffffffff;
         }
     }
 }

@@ -17,7 +17,11 @@
 </p>
 
 <p align="center">
-  <img src="docs/demo.gif" width="720" alt="AltSnip demo — select, arrow, text, mosaic, copy">
+  <img src="docs/demo.png" width="720" alt="AltSnip demo — select, arrow, text, mosaic, copy">
+</p>
+
+<p align="center">
+  <sub>↑ animated (APNG) — plays in any modern browser</sub>
 </p>
 
 ---
