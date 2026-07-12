@@ -511,7 +511,7 @@ namespace SnipTool
                 case 5: this.Close(); return;
                 case 6: Confirm(); return;
             }
-            LayoutStyle();
+            LayoutButtons();   // 工具变了：重排工具条 + 样式子条并夹进屏幕
             this.Invalidate();
         }
 
@@ -519,22 +519,45 @@ namespace SnipTool
         {
             const int GAP = 8;
             int totalW = BTN * _rects.Length;
+            Rectangle sc = ScreenClient();
+            bool style = (_tool == Tool.Arrow || _tool == Tool.Line || _tool == Tool.Rect || _tool == Tool.Text);
+            int reserve = style ? (SUB + 6) : 0;   // 给样式子条预留
+
+            // 水平：右对齐选区，夹进屏幕
             int bx = _sel.Right - totalW;
-            int by = _sel.Bottom + GAP;
-            if (bx < _sel.Left) bx = _sel.Left;
-            if (by + BTN > this.Height) by = _sel.Bottom - BTN - GAP; // 收进框内
-            if (bx + totalW > this.Width) bx = this.Width - totalW - 2;
-            if (bx < 0) bx = 2;
-            if (by < 0) by = 2;
+            if (bx + totalW > sc.Right) bx = sc.Right - totalW;
+            if (bx < sc.Left) bx = sc.Left;
+
+            // 垂直：先试选区下方 → 放不下试上方 → 再不行放选区内底部；始终留在屏幕内
+            int by;
+            if (_sel.Bottom + GAP + BTN + reserve <= sc.Bottom) by = _sel.Bottom + GAP;
+            else if (_sel.Top - GAP - BTN - reserve >= sc.Top) by = _sel.Top - GAP - BTN - reserve;
+            else by = Math.Min(_sel.Bottom - BTN - GAP, sc.Bottom - BTN - reserve - 2);
+            if (by < sc.Top + 2) by = sc.Top + 2;
 
             _bar = new Rectangle(bx, by, totalW, BTN);
             for (int i = 0; i < _rects.Length; i++)
                 _rects[i] = new Rectangle(bx + i * BTN, by, BTN, BTN);
-            LayoutStyle();
+            LayoutStyle(sc);
+        }
+
+        // 选区所在显示器的工作区（换算成 client 坐标）——用来把工具条夹在可见屏幕内
+        Rectangle ScreenClient()
+        {
+            try
+            {
+                var selScreen = new Rectangle(_sel.X + _vs.X, _sel.Y + _vs.Y, Math.Max(1, _sel.Width), Math.Max(1, _sel.Height));
+                var wa = Screen.FromRectangle(selScreen).WorkingArea;
+                var c = new Rectangle(wa.X - _vs.X, wa.Y - _vs.Y, wa.Width, wa.Height);
+                c.Intersect(new Rectangle(0, 0, this.Width, this.Height));
+                if (c.Width <= 0 || c.Height <= 0) return new Rectangle(0, 0, this.Width, this.Height);
+                return c;
+            }
+            catch { return new Rectangle(0, 0, this.Width, this.Height); }
         }
 
         // 样式子条：颜色 + 粗细（选了可着色工具时显示）
-        void LayoutStyle()
+        void LayoutStyle(Rectangle sc)
         {
             _showStyle = (_tool == Tool.Arrow || _tool == Tool.Line || _tool == Tool.Rect || _tool == Tool.Text);
             if (!_showStyle) return;
@@ -543,11 +566,11 @@ namespace SnipTool
             int gap = (_widthCount > 0) ? 12 : 0;
             int w = 8 + nColor * SUB + gap + _widthCount * SUB + 8;
             int x = _bar.X;
+            if (x + w > sc.Right) x = sc.Right - w;
+            if (x < sc.Left) x = sc.Left;
             int y = _bar.Bottom + 6;
-            if (y + SUB > this.Height) y = _bar.Y - SUB - 6;   // 下方放不下就放上方
-            if (y < 0) y = 2;
-            if (x + w > this.Width) x = this.Width - w - 2;
-            if (x < 0) x = 2;
+            if (y + SUB > sc.Bottom) y = _bar.Y - SUB - 6;   // 主条下方放不下就放主条上方
+            if (y < sc.Top) y = sc.Top + 2;
             _styleBar = new Rectangle(x, y, w, SUB);
 
             int cx = x + 8;
