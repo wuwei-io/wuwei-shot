@@ -140,13 +140,13 @@ namespace SnipTool
                 using (var valc = new SolidBrush(Color.FromArgb(0x23, 0x28, 0x30)))
                 {
                     int x = win.X + 40, y = win.Y + 84;
-                    g.DrawString("收货人", lab, labc, x, y); g.DrawString("张大成", val, valc, x + 96, y);
+                    g.DrawString("收货人", lab, labc, x, y); g.DrawString("李小萌", val, valc, x + 96, y);
                     y += 44;
-                    g.DrawString("手机号", lab, labc, x, y); g.DrawString("138 8888 6666", val, valc, x + 96, y);
+                    g.DrawString("手机号", lab, labc, x, y); g.DrawString("188 0000 0000", val, valc, x + 96, y);
                     y += 44;
-                    g.DrawString("收货地址", lab, labc, x, y); g.DrawString("杭州市 · 科研者之家 12 栋", val, valc, x + 96, y);
+                    g.DrawString("收货地址", lab, labc, x, y); g.DrawString("示例市样板区幸福路 1 号", val, valc, x + 96, y);
                     y += 44;
-                    g.DrawString("商品", lab, labc, x, y); g.DrawString("AltSnip 授权 × 1", val, valc, x + 96, y);
+                    g.DrawString("商品", lab, labc, x, y); g.DrawString("示例商品 × 1", val, valc, x + 96, y);
                 }
 
                 // 主按钮
