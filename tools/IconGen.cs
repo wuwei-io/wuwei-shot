@@ -1,5 +1,6 @@
-// AltSnip 图标/Logo 生成器 —— 按「无为」品牌 VI 绘制。
-// 产品图标规范：玄墨/靛青渐变方圆底 + 居中月白「○带缺口」(一念之门·圆相) + 缺口一点朱赭"一念"火种。
+// AltSnip 图标/Logo 生成器 —— 用「无为」品牌 VI 的设计语言，但是截图工具的专属图标。
+// 造型：玄墨/靛青渐变方圆底 + 月白取景框四角标(一眼=截图/选区) + 中心一颗朱赭"一念"火种(快门/对焦点)。
+// 无为主标「一念之门·圆相」是品牌主标，不做产品图标（否则各产品雷同）；产品图标沿用 VI 色板+圆头线性语言。
 // 色板：玄墨黑 #16191E / 靛青 #274A63 / 月白 #F4F6F8 / 银灰 #B7C0C7 / 朱赭 #C05F3C。
 // 编译： csc /target:exe /out:IconGen.exe /reference:System.Drawing.dll tools\IconGen.cs
 // 运行： IconGen.exe <输出目录>
@@ -43,37 +44,48 @@ class IconGen
             using (var br = new LinearGradientBrush(new PointF(0, 0), new PointF(S, S), INK, INK2))
                 g.FillPath(br, path);
 
-            // 一念之门·圆相：月白圆环，右下留气口
+            // 取景框四角标（月白，圆头线性）——一眼=截图/选区
             float cx = S / 2f, cy = S / 2f;
-            float ringR = S * 0.30f;
             float sw = S * 0.072f;
-            var ringRect = new RectangleF(cx - ringR, cy - ringR, ringR * 2, ringR * 2);
-            float startAngle = 70f, sweep = 300f;   // 缺口约 60°，在右下
-            using (var rb = new LinearGradientBrush(
-                new PointF(cx - ringR, cy - ringR), new PointF(cx + ringR, cy + ringR), MOON, SILVER))
-            using (var pen = new Pen(rb, sw) { StartCap = LineCap.Round, EndCap = LineCap.Round })
-                g.DrawArc(pen, ringRect, startAngle, sweep);
+            float inset = S * 0.265f, arm = S * 0.155f;
+            float lo = inset, hi = S - inset;
+            using (var rb = new LinearGradientBrush(new PointF(0, 0), new PointF(S, S), MOON, SILVER))
+            using (var pen = new Pen(rb, sw) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round })
+            {
+                Bracket(g, pen, lo, lo, +1, +1, arm); // 左上
+                Bracket(g, pen, hi, lo, -1, +1, arm); // 右上
+                Bracket(g, pen, lo, hi, +1, -1, arm); // 左下
+                Bracket(g, pen, hi, hi, -1, -1, arm); // 右下
+            }
 
-            // 缺口下端一点朱赭（含柔光）
-            double a = startAngle * Math.PI / 180.0;
-            float dx = cx + (float)(Math.Cos(a) * ringR);
-            float dy = cy + (float)(Math.Sin(a) * ringR);
-            float dotR = sw * 0.60f;
+            // 中心一念火种（朱赭 + 柔光）——快门/对焦点，也是品牌"一念"
+            float dotR = S * 0.056f;
             using (var glow = new GraphicsPath())
             {
-                glow.AddEllipse(dx - dotR * 2.6f, dy - dotR * 2.6f, dotR * 5.2f, dotR * 5.2f);
+                glow.AddEllipse(cx - dotR * 2.8f, cy - dotR * 2.8f, dotR * 5.6f, dotR * 5.6f);
                 using (var pgb = new PathGradientBrush(glow)
                 {
-                    CenterColor = Color.FromArgb(120, SPARK),
+                    CenterColor = Color.FromArgb(130, SPARK),
                     SurroundColors = new[] { Color.FromArgb(0, SPARK) },
-                    CenterPoint = new PointF(dx, dy),
+                    CenterPoint = new PointF(cx, cy),
                 })
                     g.FillPath(pgb, glow);
             }
             using (var db = new SolidBrush(SPARK))
-                g.FillEllipse(db, dx - dotR, dy - dotR, dotR * 2, dotR * 2);
+                g.FillEllipse(db, cx - dotR, cy - dotR, dotR * 2, dotR * 2);
         }
         return bmp;
+    }
+
+    // 一个 L 形角标：肘点 (ex,ey)，两臂沿 dirX/dirY 方向伸出 arm
+    static void Bracket(Graphics g, Pen pen, float ex, float ey, int dirX, int dirY, float arm)
+    {
+        using (var p = new GraphicsPath())
+        {
+            p.AddLine(ex + dirX * arm, ey, ex, ey);
+            p.AddLine(ex, ey, ex, ey + dirY * arm);
+            g.DrawPath(pen, p);
+        }
     }
 
     static GraphicsPath Rounded(RectangleF r, float radius)
