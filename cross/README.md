@@ -23,15 +23,23 @@ stays clean.
 
 ## Status — roadmap
 
-- [x] **M0** — Avalonia skeleton + platform abstraction + 3-OS CI that compiles &
-  publishes (Windows / macOS arm64+x64 / Linux). *Built in the cloud via GitHub
-  Actions; the maintainer's dev box has no .NET SDK, so CI is the source of truth.*
-- [ ] **M1** — capture the screen → drag a selection → copy to clipboard (per-OS).
-- [ ] **M2** — global `Alt + A` hotkey + tray icon, per-OS.
-- [ ] **M3** — port annotations (arrow / line / rect / text / mosaic), colors, save PNG.
-- [ ] **M4** — polish, packaging (`.app`/AppImage), signed releases for all three.
+- [x] **M0** — Avalonia skeleton + platform abstraction + 3-OS CI.
+- [x] **M1** — capture → drag a selection → copy to clipboard. Windows via Win32
+  (BitBlt / CF_DIB); macOS via `screencapture` + `osascript`; Linux via
+  `grim`/`scrot` + `wl-copy`/`xclip`.
+- [x] **M2** — tray icon triggers a capture on every OS. Global `Alt + A`:
+  Windows (`WH_KEYBOARD_LL`) ✅, Linux (X11 `XGrabKey`) best-effort, macOS via
+  tray (Carbon hotkey TODO).
+- [x] **M3** — full annotation engine in SkiaSharp: arrow / line / rectangle /
+  text (IME) / mosaic, color + thickness, move/resize handles, undo, copy, save PNG.
+- [x] **M4** — cross-published self-contained single-file binaries for all four
+  RIDs, attached to the [`cross-preview`](../../releases/tag/cross-preview) prerelease.
+- [ ] **Next** — real-hardware testing on macOS & Linux; `.app`/AppImage packaging;
+  code signing; multi-monitor; macOS global hotkey.
 
-macOS and Linux behaviour needs testing on real machines — help welcome.
+**Verified:** compiles on all platforms (CI); the Windows build launches and runs
+cleanly (smoke-tested). **Not yet verified:** macOS & Linux runtime behaviour — help
+welcome. The maintainer's dev box has no .NET SDK, so CI is the source of truth.
 
 ## Build
 

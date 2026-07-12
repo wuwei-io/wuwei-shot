@@ -77,7 +77,14 @@ Win + R  →  shell:startup  →  drop a shortcut to Snip.exe in there
 
 ## Platform
 
-AltSnip is **Windows-only** (Windows 8 or newer). It's built directly on Win32 — global hotkeys, screen capture, and the clipboard all go through Windows APIs — so there is no macOS or Linux build. If you'd like to see one, that would be a from-scratch cross-platform rewrite; open an issue if you want to help.
+The stable build is **Windows** (Windows 8+) — the tiny single-file `.exe` above.
+
+A ground-up **cross-platform rewrite** (Avalonia) for **Windows / macOS / Linux** is
+in progress on the [`cross-platform`](../../tree/cross-platform) branch, with early
+binaries in the [`cross-preview`](../../releases/tag/cross-preview) prerelease. It's
+feature-complete (select, annotate, mosaic, copy, save) and the Windows build is
+smoke-tested; macOS/Linux still need real-hardware testing. See
+[cross/README.md](cross/README.md).
 
 ## Build from source
 

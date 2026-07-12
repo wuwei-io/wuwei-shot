@@ -73,7 +73,12 @@
 
 ## 平台
 
-AltSnip **仅支持 Windows**(Windows 8 及以上)。它直接基于 Win32 —— 全局热键、屏幕捕获、剪贴板全走 Windows API,所以没有 macOS / Linux 版本。想要跨平台版需要从零重写,欢迎在 issue 里一起搞。
+稳定版是 **Windows**(Windows 8 及以上)—— 就是上面那个单文件 `.exe`。
+
+面向 **Windows / macOS / Linux** 的**跨平台重写**(基于 Avalonia)正在
+[`cross-platform`](../../tree/cross-platform) 分支推进,早期二进制放在
+[`cross-preview`](../../releases/tag/cross-preview) 预发布里。功能已完整(框选、标注、马赛克、复制、保存),
+Windows 版已冒烟测试;macOS/Linux 还需真机测试。详见 [cross/README.md](cross/README.md)。
 
 ## 从源码编译
 
