@@ -36,8 +36,7 @@ public sealed class OverlayControl : Control
     /// <summary>承载文字输入框的图层（由窗口提供，绝对定位）。</summary>
     public Canvas? TextLayer { get; set; }
 
-    SKBitmap? _frame;                    // 物理像素帧缓冲
-    Bitmap? _ava;                        // 帧缓冲的 Avalonia 包装（显示用）
+    WriteableBitmap? _wb;                 // 复用的显示位图（物理像素尺寸=截图尺寸）
     double _scale = 1;
     double _dipW, _dipH;
     double DipW => _dipW;
@@ -100,6 +99,8 @@ public sealed class OverlayControl : Control
         _src = src;
         _onClose = onClose;
         _onCopy = onCopy;
+        _wb = new WriteableBitmap(new PixelSize(src.Width, src.Height), new Vector(96, 96),
+            Avalonia.Platform.PixelFormat.Bgra8888, Avalonia.Platform.AlphaFormat.Premul);
         Focusable = true;
         Cursor = new Cursor(StandardCursorType.Cross);
     }
@@ -123,13 +124,13 @@ public sealed class OverlayControl : Control
     protected override Size ArrangeOverride(Size finalSize)
     {
         var r = base.ArrangeOverride(finalSize);
-        if (finalSize.Width > 0 && (_frame == null || Math.Abs(finalSize.Width - _dipW) > 0.5))
+        // 仅在尺寸真的变化时重绘（防死循环）；帧位图尺寸固定=截图尺寸，从不重建（防泄漏）
+        if (finalSize.Width > 0 &&
+            (Math.Abs(finalSize.Width - _dipW) > 0.5 || Math.Abs(finalSize.Height - _dipH) > 0.5))
         {
             _dipW = finalSize.Width;
             _dipH = finalSize.Height;
             _scale = _src.Width / _dipW;
-            _frame?.Dispose();
-            _frame = new SKBitmap(_src.Width, _src.Height, SKColorType.Bgra8888, SKAlphaType.Premul);
             Repaint();
         }
         return r;
@@ -137,23 +138,23 @@ public sealed class OverlayControl : Control
 
     void Repaint()
     {
-        if (_frame == null || DipW <= 0) return;
-        using (var c = new SKCanvas(_frame))
+        if (_wb == null || _dipW <= 0) return;
+        using (var fb = _wb.Lock())
+        using (var surf = SKSurface.Create(
+            new SKImageInfo(_src.Width, _src.Height, SKColorType.Bgra8888, SKAlphaType.Premul),
+            fb.Address, fb.RowBytes))
         {
+            var c = surf.Canvas;
             c.Clear(SKColors.Black);
-            c.Save();
             c.Scale((float)_scale);
             DrawScene(c);
-            c.Restore();
         }
-        _ava = new Bitmap(Avalonia.Platform.PixelFormat.Bgra8888, Avalonia.Platform.AlphaFormat.Premul,
-            _frame.GetPixels(), new PixelSize(_frame.Width, _frame.Height), new Vector(96, 96), _frame.RowBytes);
         InvalidateVisual();
     }
 
     public override void Render(DrawingContext ctx)
     {
-        if (_ava != null) ctx.DrawImage(_ava, new Rect(0, 0, DipW, DipH));
+        if (_wb != null) ctx.DrawImage(_wb, new Rect(0, 0, _dipW, _dipH));
     }
 
     // ---------- 场景绘制（DIP 坐标）----------
