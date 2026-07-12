@@ -16,7 +16,9 @@ namespace SnipTool
     {
         const int WH_KEYBOARD_LL = 13;
         const int WM_KEYDOWN = 0x0100;
+        const int WM_KEYUP = 0x0101;
         const int WM_SYSKEYDOWN = 0x0104;
+        const int WM_SYSKEYUP = 0x0105;
         const int VK_A = 0x41;
         const int VK_MENU = 0x12;   // Alt
         const int LLKHF_INJECTED = 0x10;
@@ -39,6 +41,8 @@ namespace SnipTool
 
         NotifyIcon _tray;
         bool _capturing = false;
+        bool _altARepeat = false;     // 防止长按 Alt+A 连发
+        OverlayForm _overlay;         // 当前遮罩，供再次 Alt+A 关闭
         IntPtr _hook = IntPtr.Zero;
         HookProc _proc;   // 保持引用，防止被 GC 回收导致钩子失效
 
@@ -81,20 +85,33 @@ namespace SnipTool
 
         IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
         {
-            if (nCode >= 0 && (wParam == (IntPtr)WM_KEYDOWN || wParam == (IntPtr)WM_SYSKEYDOWN))
+            if (nCode >= 0)
             {
+                int msg = (int)wParam;
                 var kb = (KBDLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(KBDLLHOOKSTRUCT));
-                // 命中 A 键 + 当前 Alt 处于按下状态；忽略程序注入的假按键
-                if (kb.vkCode == VK_A && (kb.flags & LLKHF_INJECTED) == 0
-                    && (GetAsyncKeyState(VK_MENU) & 0x8000) != 0)
+                if (kb.vkCode == VK_A && (kb.flags & LLKHF_INJECTED) == 0)
                 {
-                    // 交给 UI 线程截图，并吞掉这个按键（微信等收不到）
-                    if (!_capturing)
-                        this.BeginInvoke((Action)StartCapture);
-                    return (IntPtr)1;
+                    // Alt+A 按下：切换（没开就截图，已开就取消）；长按只触发一次
+                    if ((msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN) && (GetAsyncKeyState(VK_MENU) & 0x8000) != 0)
+                    {
+                        if (!_altARepeat) { _altARepeat = true; this.BeginInvoke((Action)ToggleCapture); }
+                        return (IntPtr)1;   // 吞掉（微信等收不到）
+                    }
+                    // A 抬起：复位，并吞掉配对的抬起
+                    if ((msg == WM_KEYUP || msg == WM_SYSKEYUP) && _altARepeat)
+                    {
+                        _altARepeat = false;
+                        return (IntPtr)1;
+                    }
                 }
             }
             return CallNextHookEx(_hook, nCode, wParam, lParam);
+        }
+
+        void ToggleCapture()
+        {
+            if (_capturing) { if (_overlay != null) _overlay.Close(); }
+            else StartCapture();
         }
 
         void StartCapture()
@@ -112,7 +129,9 @@ namespace SnipTool
                 }
                 using (var overlay = new OverlayForm(full, vs))
                 {
+                    _overlay = overlay;
                     overlay.ShowDialog();
+                    _overlay = null;
                 }
                 full.Dispose();
             }
@@ -310,6 +329,23 @@ namespace SnipTool
 
         void OnDown(object s, MouseEventArgs e)
         {
+            // 右键取消：正在打字→取消这段字；已框选→退回未框选可重画；未框选→关闭
+            if (e.Button == MouseButtons.Right)
+            {
+                if (_tb != null) { CancelText(); return; }
+                if (_hasSel || _dragging)
+                {
+                    _dragging = _moving = _resizing = _annotating = false;
+                    _drawing = null; _handle = -1;
+                    _hasSel = false; _sel = Rectangle.Empty;
+                    _tool = Tool.None; _annos.Clear(); _hover = 0;
+                    this.Cursor = Cursors.Cross;
+                    this.Invalidate();
+                    return;
+                }
+                this.Close();
+                return;
+            }
             if (e.Button != MouseButtons.Left) return;
 
             // 点击别处先把正在输入的文字落定
