@@ -33,7 +33,7 @@ stays clean.
 - [x] **M3** — full annotation engine in SkiaSharp: arrow / line / rectangle /
   text (IME) / mosaic, color + thickness, move/resize handles, undo, copy, save PNG.
 - [x] **M4** — cross-published self-contained single-file binaries for all four
-  RIDs, attached to the [`v2.0.0-preview`](../../releases/tag/v2.0.0-preview.1) prerelease.
+  RIDs, attached to the [`v2.0.0`](../../releases/tag/v2.0.0) release.
 - [ ] **Next** — real-hardware testing on macOS & Linux; `.app`/AppImage packaging;
   code signing; multi-monitor; macOS global hotkey.
 

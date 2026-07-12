@@ -1,7 +1,8 @@
 name: release-cross
 
-# 从单台 Linux 跑机交叉发布全部平台的自包含单文件包，
-# 打成一个预发布 (prerelease) tag=cross-preview。
+# 从单台 Linux 跑机交叉发布并打成各平台标准分发包：
+#   Windows .exe / macOS .app(zip) / Linux .AppImage
+# 作为正式版 v2.0.0（Latest）发布。
 on:
   workflow_dispatch:
   push:
@@ -28,32 +29,35 @@ jobs:
               --self-contained true -p:PublishSingleFile=true \
               -p:IncludeNativeLibrariesForSelfExtract=true -o out/$rid
           done
-          mkdir -p dist
-          cp out/win-x64/AltSnip.exe   dist/AltSnip-Windows-x64.exe
-          cp out/osx-arm64/AltSnip     dist/AltSnip-macOS-arm64
-          cp out/osx-x64/AltSnip       dist/AltSnip-macOS-x64
-          cp out/linux-x64/AltSnip     dist/AltSnip-Linux-x64
-          chmod +x dist/AltSnip-macOS-arm64 dist/AltSnip-macOS-x64 dist/AltSnip-Linux-x64
-          ls -lh dist
+
+      - name: Package (Windows exe / macOS .app zip / Linux AppImage)
+        run: bash scripts/package.sh
 
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: v2.0.0-preview.1
+          tag_name: v2.0.0
           target_commitish: cross-platform
-          name: AltSnip v2.0.0-preview — cross-platform (Windows / macOS / Linux)
-          prerelease: true
+          name: AltSnip v2.0.0 — cross-platform (Windows / macOS / Linux)
+          prerelease: false
+          make_latest: 'true'
           files: dist/*
           body: |
-            **Experimental Avalonia rewrite** running on Windows, macOS, and Linux.
-            Feature-complete overlay (select / move-resize / arrow-line-rect-text-mosaic /
-            colors / copy / save-PNG). Tray icon triggers a capture on every OS;
-            the global `Alt + A` hotkey currently works on Windows.
+            The **cross-platform AltSnip** — one codebase (Avalonia + SkiaSharp) for
+            **Windows, macOS, and Linux**. Feature-complete: capture, move/resize the box,
+            arrow / line / rectangle / text (IME) / mosaic, colors & thickness, copy, and
+            save-as-PNG. Tray icon triggers a capture on every OS; global `Alt + A` works
+            on Windows (and X11 Linux).
 
-            - **Windows**: download `AltSnip-Windows-x64.exe`, run it (tray icon), press `Alt+A`.
-            - **macOS**: `AltSnip-macOS-arm64` (Apple silicon) / `-x64` (Intel). `chmod +x`,
-              then run; needs Screen Recording permission. Unsigned — right-click ▸ Open.
-            - **Linux**: `AltSnip-Linux-x64`. `chmod +x`, run. Needs `grim`/`scrot` for
-              capture and `wl-copy`/`xclip` for clipboard.
+            ### Downloads
+            - **Windows** — `AltSnip-Windows-x64.exe`. Run it (tray icon), press `Alt + A`. ✅ tested.
+            - **macOS** — `AltSnip-macOS-arm64.zip` (Apple silicon) / `-x64.zip` (Intel).
+              Unzip, then right-click ▸ Open the app (unsigned); needs Screen Recording
+              permission. ⚠️ not yet tested on real hardware.
+            - **Linux** — `AltSnip-Linux-x64.AppImage`. `chmod +x`, double-click or run.
+              Needs `grim`/`scrot` for capture and `wl-copy`/`xclip` for clipboard.
+              ⚠️ not yet tested on real hardware.
 
-            macOS/Linux builds are not yet tested on real hardware — feedback welcome.
-            The classic tiny Windows build lives in the main releases.
+            > Want the **ultra-light Windows-only** build? The classic single ~50 KB `.exe`
+            > is at [v1.4.3](../../releases/tag/v1.4.3).
+
+            macOS/Linux feedback welcome — see [cross/README.md](../../blob/master/cross/README.md).

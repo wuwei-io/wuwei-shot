@@ -77,7 +77,7 @@
 
 面向 **Windows / macOS / Linux** 的**跨平台重写**(基于 Avalonia)正在
 [`cross-platform`](../../tree/cross-platform) 分支推进,早期二进制放在
-[`v2.0.0-preview`](../../releases/tag/v2.0.0-preview.1) 预发布里。功能已完整(框选、标注、马赛克、复制、保存),
+[`v2.0.0`](../../releases/tag/v2.0.0) 发布里。功能已完整(框选、标注、马赛克、复制、保存),
 Windows 版已冒烟测试;macOS/Linux 还需真机测试。详见 [cross/README.md](cross/README.md)。
 
 ## 从源码编译

@@ -81,7 +81,7 @@ The stable build is **Windows** (Windows 8+) — the tiny single-file `.exe` abo
 
 A ground-up **cross-platform rewrite** (Avalonia) for **Windows / macOS / Linux** is
 in progress on the [`cross-platform`](../../tree/cross-platform) branch, with early
-binaries in the [`v2.0.0-preview`](../../releases/tag/v2.0.0-preview.1) prerelease. It's
+binaries in the [`v2.0.0`](../../releases/tag/v2.0.0) release. It's
 feature-complete (select, annotate, mosaic, copy, save) and the Windows build is
 smoke-tested; macOS/Linux still need real-hardware testing. See
 [cross/README.md](cross/README.md).
