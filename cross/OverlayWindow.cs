@@ -39,9 +39,11 @@ public sealed class OverlayWindow : Window
     protected override void OnOpened(EventArgs e)
     {
         base.OnOpened(e);
+        Log.W($"opened pos={Position} bounds={Bounds} client={ClientSize} state={WindowState}");
         Position = _bounds.Position;
         WindowState = WindowState.FullScreen;   // 铺满该屏
         Activate();
         _control.Focus();
+        Log.W($"after fullscreen bounds={Bounds} client={ClientSize} state={WindowState}");
     }
 }

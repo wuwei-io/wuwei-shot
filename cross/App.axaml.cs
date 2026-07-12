@@ -18,6 +18,8 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        Log.Clear();
+        Log.W("app init");
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
@@ -89,12 +91,15 @@ public partial class App : Application
             var screen = (cur.HasValue ? _host.Screens.ScreenFromPoint(cur.Value) : null)
                          ?? _host.Screens.Primary ?? all[0];
             var bounds = screen.Bounds;
+            Log.W($"capture screen bounds={bounds} scaling={screen.Scaling} cursor={cur}");
 
             var shot = PlatformServices.Current.CaptureRegion(bounds);
+            Log.W($"shot {shot.Width}x{shot.Height}");
             var win = new OverlayWindow(shot, bounds);
             win.Closed += (_, _) => _capturing = false;
             win.Show();
             win.Activate();
+            Log.W("win.Show done");
         }
         catch { _capturing = false; }
     }

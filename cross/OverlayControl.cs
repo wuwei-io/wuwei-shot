@@ -136,6 +136,7 @@ public sealed class OverlayControl : Control
             _dipW = finalSize.Width;
             _dipH = finalSize.Height;
             _scale = _src.Width / _dipW;
+            Log.W($"arrange final={finalSize} dip={_dipW}x{_dipH} scale={_scale:0.00}");
             Repaint();
         }
         return r;
@@ -159,6 +160,7 @@ public sealed class OverlayControl : Control
 
     public override void Render(DrawingContext ctx)
     {
+        Log.W($"render wb={_wb != null} dip={_dipW}x{_dipH} bounds={Bounds}");
         if (_wb != null) ctx.DrawImage(_wb, new Rect(0, 0, _dipW, _dipH));
     }
 
