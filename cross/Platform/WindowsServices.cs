@@ -91,6 +91,12 @@ public sealed class WindowsServices : IPlatformServices
     public IDisposable? RegisterHotkey(Action onAltA)
         => new HotkeyHook(onAltA);
 
+    public PixelPoint? CursorPosition()
+        => GetCursorPos(out var p) ? new PixelPoint(p.X, p.Y) : (PixelPoint?)null;
+
+    [StructLayout(LayoutKind.Sequential)] struct POINT { public int X, Y; }
+    [DllImport("user32.dll")] static extern bool GetCursorPos(out POINT p);
+
     private sealed class HotkeyHook : IDisposable
     {
         const int WH_KEYBOARD_LL = 13, WM_KEYDOWN = 0x100, WM_SYSKEYDOWN = 0x104,

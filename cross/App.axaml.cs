@@ -84,19 +84,15 @@ public partial class App : Application
             var all = _host.Screens.All;
             if (all == null || all.Count == 0) { _capturing = false; return; }
 
-            // 覆盖整个虚拟屏（所有显示器的并集），像经典版那样，随处可框选
-            int l = int.MaxValue, t = int.MaxValue, r = int.MinValue, b = int.MinValue;
-            foreach (var s in all)
-            {
-                var bd = s.Bounds;
-                l = Math.Min(l, bd.X); t = Math.Min(t, bd.Y);
-                r = Math.Max(r, bd.X + bd.Width); b = Math.Max(b, bd.Y + bd.Height);
-            }
-            var vbounds = new PixelRect(l, t, r - l, b - t);
-            double scaling = _host.Screens.Primary?.Scaling ?? all[0].Scaling;
+            // 覆盖鼠标所在的那个显示器（单窗口最稳，且弹在你正操作的屏上）
+            var cur = PlatformServices.Current.CursorPosition();
+            var screen = (cur.HasValue ? _host.Screens.ScreenFromPoint(cur.Value) : null)
+                         ?? _host.Screens.Primary ?? all[0];
+            var bounds = screen.Bounds;
+            double scaling = screen.Scaling;
 
-            var shot = PlatformServices.Current.CaptureRegion(vbounds);
-            var win = new OverlayWindow(shot, vbounds, scaling);
+            var shot = PlatformServices.Current.CaptureRegion(bounds);
+            var win = new OverlayWindow(shot, bounds, scaling);
             win.Closed += (_, _) => _capturing = false;
             win.Show();
             win.Activate();

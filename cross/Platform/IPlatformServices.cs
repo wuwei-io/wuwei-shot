@@ -20,4 +20,7 @@ public interface IPlatformServices
 
     /// <summary>注册全局热键 Alt+A；不支持的平台返回 null。返回值 Dispose 时注销。</summary>
     IDisposable? RegisterHotkey(Action onAltA);
+
+    /// <summary>当前鼠标位置（屏幕物理像素）；拿不到则返回 null。</summary>
+    PixelPoint? CursorPosition();
 }

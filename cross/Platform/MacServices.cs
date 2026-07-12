@@ -30,5 +30,7 @@ public sealed class MacServices : IPlatformServices
                  $"set the clipboard to (read (POSIX file \"{tmp}\") as «class PNGf»)");
     }
 
-    public IDisposable? RegisterHotkey(Action onAltA) => null; // M2: Carbon RegisterEventHotKey
+    public IDisposable? RegisterHotkey(Action onAltA) => null;
+
+    public Avalonia.PixelPoint? CursorPosition() => null; // M2: Carbon RegisterEventHotKey
 }
