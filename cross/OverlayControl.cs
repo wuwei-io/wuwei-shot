@@ -47,6 +47,11 @@ public sealed class OverlayControl : Control
     SKPoint _start;
     SKRect _sel;
 
+    // 鼠标准星（初始框选阶段）
+    SKPoint _mouse;
+    bool _mouseIn;
+    static readonly Cursor CurHidden = new Cursor(StandardCursorType.None);
+
     // 移动/缩放
     bool _moving, _resizing;
     int _handle = -1;
@@ -102,7 +107,7 @@ public sealed class OverlayControl : Control
         _wb = new WriteableBitmap(new PixelSize(src.Width, src.Height), new Vector(96, 96),
             Avalonia.Platform.PixelFormat.Bgra8888, Avalonia.Platform.AlphaFormat.Premul);
         Focusable = true;
-        Cursor = new Cursor(StandardCursorType.Cross);
+        Cursor = CurHidden;   // 隐藏系统灰十字，改用自绘金色准星
     }
 
     static SKTypeface ResolveCjk()
@@ -183,6 +188,12 @@ public sealed class OverlayControl : Control
         }
         else if (!_dragging)
         {
+            if (_mouseIn)
+            {
+                using var gp = new SKPaint { Color = C_GOLD.WithAlpha(220), StrokeWidth = 1, IsAntialias = false };
+                c.DrawLine(0, _mouse.Y, (float)DipW, _mouse.Y, gp);
+                c.DrawLine(_mouse.X, 0, _mouse.X, (float)DipH, gp);
+            }
             DrawTip(c);
         }
     }
@@ -545,14 +556,21 @@ public sealed class OverlayControl : Control
             }
         }
         _dragging = true; _hasSel = false; _tool = Tool.None; _annos.Clear(); _hover = 0;
-        Cursor = new Cursor(StandardCursorType.Cross);
+        Cursor = CurHidden;
         _start = p; _sel = new SKRect(p.X, p.Y, p.X, p.Y);
         Repaint();
+    }
+
+    protected override void OnPointerExited(PointerEventArgs e)
+    {
+        _mouseIn = false;
+        if (!_hasSel && !_dragging) Repaint();
     }
 
     protected override void OnPointerMoved(PointerEventArgs e)
     {
         var p = P(e.GetPosition(this));
+        _mouse = p; _mouseIn = true;
         if (_dragging) { _sel = Norm(_start, p); Repaint(); return; }
         if (_moving)
         {
@@ -578,6 +596,7 @@ public sealed class OverlayControl : Control
             else Cursor = new Cursor(StandardCursorType.Cross);
             if (id != _hover) { _hover = id; Repaint(); }
         }
+        else Repaint();   // 初始框选阶段：重绘让金色准星跟随
     }
 
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
