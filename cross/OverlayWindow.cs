@@ -22,8 +22,12 @@ public sealed class OverlayWindow : Window
         Width = bounds.Width / scaling;
         Height = bounds.Height / scaling;
 
-        _control = new OverlayControl(shot, Close, Copy);
-        Content = _control;
+        var textLayer = new Canvas();
+        _control = new OverlayControl(shot, Close, Copy) { TextLayer = textLayer };
+        var grid = new Grid();
+        grid.Children.Add(_control);
+        grid.Children.Add(textLayer);
+        Content = grid;
     }
 
     void Copy(SKImage image)

@@ -27,17 +27,21 @@ public sealed class Anno
 /// 全屏取景 + 标注层（SkiaSharp 绘制，与最终成图共用同一套绘制代码）。
 /// 坐标统一用 DIP；画到物理像素帧缓冲时对 canvas 做 Scale(_scale)。
 /// </summary>
-public sealed class OverlayControl : Canvas
+public sealed class OverlayControl : Control
 {
     readonly SKBitmap _src;              // 物理像素原图
     readonly Action _onClose;
     readonly Action<SKImage> _onCopy;
 
+    /// <summary>承载文字输入框的图层（由窗口提供，绝对定位）。</summary>
+    public Canvas? TextLayer { get; set; }
+
     SKBitmap? _frame;                    // 物理像素帧缓冲
     Bitmap? _ava;                        // 帧缓冲的 Avalonia 包装（显示用）
     double _scale = 1;
-    double DipW => Bounds.Width;
-    double DipH => Bounds.Height;
+    double _dipW, _dipH;
+    double DipW => _dipW;
+    double DipH => _dipH;
 
     // 选区（DIP）
     bool _dragging, _hasSel;
@@ -116,18 +120,19 @@ public sealed class OverlayControl : Canvas
     }
 
     // ---------- 帧缓冲 / 显示 ----------
-    void EnsureScale()
+    protected override Size ArrangeOverride(Size finalSize)
     {
-        if (DipW > 0) _scale = _src.Width / DipW;
-    }
-
-    protected override void OnSizeChanged(SizeChangedEventArgs e)
-    {
-        base.OnSizeChanged(e);
-        EnsureScale();
-        _frame?.Dispose();
-        _frame = new SKBitmap(_src.Width, _src.Height, SKColorType.Bgra8888, SKAlphaType.Premul);
-        Repaint();
+        var r = base.ArrangeOverride(finalSize);
+        if (finalSize.Width > 0 && (_frame == null || Math.Abs(finalSize.Width - _dipW) > 0.5))
+        {
+            _dipW = finalSize.Width;
+            _dipH = finalSize.Height;
+            _scale = _src.Width / _dipW;
+            _frame?.Dispose();
+            _frame = new SKBitmap(_src.Width, _src.Height, SKColorType.Bgra8888, SKAlphaType.Premul);
+            Repaint();
+        }
+        return r;
     }
 
     void Repaint()
@@ -649,9 +654,9 @@ public sealed class OverlayControl : Canvas
             MinWidth = 20,
             Tag = p,
         };
-        SetLeft(_tb, p.X);
-        SetTop(_tb, p.Y);
-        Children.Add(_tb);
+        Canvas.SetLeft(_tb, p.X);
+        Canvas.SetTop(_tb, p.Y);
+        TextLayer?.Children.Add(_tb);
         _tb.Focus();
     }
 
@@ -661,7 +666,7 @@ public sealed class OverlayControl : Canvas
         var tb = _tb; _tb = null;
         var p = (SKPoint)tb.Tag!;
         string txt = tb.Text ?? "";
-        Children.Remove(tb);
+        TextLayer?.Children.Remove(tb);
         if (txt.Trim().Length > 0)
             _annos.Add(new Anno { Type = Tool.Text, A = p, Text = txt, Color = _color });
         Focus();
@@ -671,7 +676,7 @@ public sealed class OverlayControl : Canvas
     void CancelText()
     {
         if (_tb == null) return;
-        Children.Remove(_tb);
+        TextLayer?.Children.Remove(_tb);
         _tb = null;
         Focus();
         Repaint();
