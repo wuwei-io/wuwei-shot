@@ -75,20 +75,19 @@ public sealed class MacServices : IPlatformServices
     public Avalonia.PixelPoint? CursorPosition() => null;
 }
 
-/// <summary>用 Carbon RegisterEventHotKey 注册全局热键 Alt+A。
-/// 纯热键注册无需"辅助功能"授权（不同于 CGEventTap），开箱即用。</summary>
+/// <summary>用 Carbon RegisterEventHotKey 注册全局热键 Option+A(=Alt+A)。
+/// 纯热键注册无需「辅助功能」授权、简单可靠。前提：Option+A 未被别的 app 占用
+/// （微信默认占用它 → 需在微信里把其截图快捷键改掉，让出 Option+A）。</summary>
 internal static class MacHotKey
 {
     const string Carbon = "/System/Library/Frameworks/Carbon.framework/Carbon";
 
-    // 'keyb'；kEventHotKeyPressed = 5；controlKey = 1<<12；optionKey = 1<<11；kVK_ANSI_A = 0
+    // 'keyb'；kEventHotKeyPressed = 5；optionKey = 1<<11；kVK_ANSI_A = 0
     const uint kEventClassKeyboard = 0x6B657962;
     const uint kEventHotKeyPressed = 5;
-    const uint controlKey = 0x1000;
     const uint optionKey = 0x0800;
     const uint kVK_ANSI_A = 0x00;
-    // 默认热键 Ctrl+Option+A（避开微信默认的 Option+A 冲突）
-    const uint kHotKeyMods = controlKey | optionKey;
+    const uint kHotKeyMods = optionKey;   // Option+A = Alt+A
 
     [StructLayout(LayoutKind.Sequential)]
     struct EventTypeSpec { public uint eventClass; public uint eventKind; }

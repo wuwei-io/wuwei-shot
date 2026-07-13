@@ -52,8 +52,8 @@ public partial class App : Application
 
     private void SetupTray()
     {
-        // macOS 全局热键是 Ctrl+Option+A（避开微信占用的 Option+A）；其它平台是 Alt+A
-        string hk = OperatingSystem.IsMacOS() ? "⌃⌥A" : "Alt+A";
+        // macOS 全局热键 Option+A(=Alt+A)，用 CGEventTap 拦截、优先级高于微信；其它平台 Alt+A
+        string hk = OperatingSystem.IsMacOS() ? "⌥A" : "Alt+A";
         var tray = new TrayIcon { ToolTipText = $"AltSnip — {hk} to capture", Icon = LoadIcon() };
         tray.Clicked += (_, _) => Capture();
 
