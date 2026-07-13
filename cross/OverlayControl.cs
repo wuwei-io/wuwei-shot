@@ -93,10 +93,13 @@ public sealed class OverlayControl : Control
     };
     static readonly float[] WIDTHS = { 2f, 4f, 7f };
 
-    // 工具条（DIP）：id 1箭头 2直线 3方框 7文字 8马赛克 4撤销 9保存 5取消 6确认
+    // 工具条（DIP）：id 1箭头 2直线 3方框 7文字 8马赛克 10长截图 4撤销 9保存 5取消 6确认
     const float BTN = 42, HS = 8, SUB = 30;
-    readonly int[] _ids = { 1, 2, 3, 7, 8, 4, 9, 5, 6 };
-    readonly SKRect[] _rects = new SKRect[9];
+    readonly int[] _ids = { 1, 2, 3, 7, 8, 10, 4, 9, 5, 6 };
+    readonly SKRect[] _rects = new SKRect[10];
+
+    /// <summary>长截图回调：给出选区首帧(物理像素) + 选区(DIP)，由窗口接管滚动截取。</summary>
+    public Action<SKBitmap, SKRect>? OnLongShot;
     SKRect _bar;
     int _hover;
     bool _showStyle;
@@ -332,6 +335,7 @@ public sealed class OverlayControl : Control
                 case 3: IconRect(c, cell, ic); break;
                 case 7: IconText(c, cell, ic); break;
                 case 8: IconMosaic(c, cell, ic); break;
+                case 10: IconLongShot(c, cell, ic); break;
                 case 4: IconUndo(c, cell, _annos.Count == 0 ? new SKColor(0xb0, 0x9b, 0x80, 90) : ic); break;
                 case 9: IconSave(c, cell, ic); break;
                 case 5: IconCross(c, cell, hover ? C_TEXT : C_TEXT2); break;
@@ -425,6 +429,19 @@ public sealed class OverlayControl : Control
         c.DrawLine(new SKPoint(cx, by), new SKPoint(cx - 5, by - 5), p);
         c.DrawLine(new SKPoint(cx, by), new SKPoint(cx + 5, by - 5), p);
         c.DrawLine(new SKPoint(r.Left + 11, r.Bottom - 11), new SKPoint(r.Right - 11, r.Bottom - 11), p);
+    }
+
+    // 长截图：细页框 + 两个向下箭头（滚动取长图）
+    void IconLongShot(SKCanvas c, SKRect r, SKColor col)
+    {
+        using var p = Stroke(col, 2.0f);
+        using (var rp = new SKPaint { Color = col, IsAntialias = true, IsStroke = true, StrokeWidth = 1.6f })
+            c.DrawRoundRect(new SKRect(r.Left + 13, r.Top + 11, r.Right - 13, r.Bottom - 11), 2, 2, rp);
+        float cx = r.MidX;
+        c.DrawLine(new SKPoint(cx - 4, r.MidY - 4), new SKPoint(cx, r.MidY), p);
+        c.DrawLine(new SKPoint(cx, r.MidY), new SKPoint(cx + 4, r.MidY - 4), p);
+        c.DrawLine(new SKPoint(cx - 4, r.MidY + 1), new SKPoint(cx, r.MidY + 5), p);
+        c.DrawLine(new SKPoint(cx, r.MidY + 5), new SKPoint(cx + 4, r.MidY + 1), p);
     }
     void IconCross(SKCanvas c, SKRect r, SKColor col)
     {
@@ -683,12 +700,26 @@ public sealed class OverlayControl : Control
             case 3: _tool = _tool == Tool.Rect ? Tool.None : Tool.Rect; break;
             case 7: _tool = _tool == Tool.Text ? Tool.None : Tool.Text; break;
             case 8: _tool = _tool == Tool.Mosaic ? Tool.None : Tool.Mosaic; break;
+            case 10: StartLongShot(); return;
             case 4: if (_annos.Count > 0) _annos.RemoveAt(_annos.Count - 1); break;
             case 9: _ = SavePng(); return;
             case 5: _onClose(); return;
             case 6: Confirm(); return;
         }
         Layout(); Repaint();
+    }
+
+    void StartLongShot()
+    {
+        if (!_hasSel || OnLongShot == null) return;
+        if (_tb != null) CommitText();
+        // 从冻结原图裁出首帧（物理像素）
+        int l = Math.Max(0, (int)(_sel.Left * _scale)), t = Math.Max(0, (int)(_sel.Top * _scale));
+        int r = Math.Min(_src.Width, (int)(_sel.Right * _scale)), b = Math.Min(_src.Height, (int)(_sel.Bottom * _scale));
+        if (r <= l || b <= t) return;
+        var f0 = new SKBitmap(r - l, b - t, SKColorType.Bgra8888, SKAlphaType.Premul);
+        if (!_src.ExtractSubset(f0, new SKRectI(l, t, r, b))) return;
+        OnLongShot(f0, _sel);
     }
 
     // ---------- 文字 ----------

@@ -61,6 +61,15 @@ public sealed class LinuxServices : IPlatformServices
 
     public PixelPoint? CursorPosition() => null;
 
+    public void ScrollDown(PixelPoint at, int notches)
+    {
+        if (Proc.Exists("xdotool"))
+        {
+            Proc.Run("xdotool", "mousemove", at.X.ToString(), at.Y.ToString());
+            for (int i = 0; i < notches; i++) Proc.Run("xdotool", "click", "5"); // button 5 = 向下滚
+        }
+    }
+
     private sealed class X11Hotkey : IDisposable
     {
         const int GrabModeAsync = 1, KeyPress = 2;

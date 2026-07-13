@@ -94,8 +94,17 @@ public sealed class WindowsServices : IPlatformServices
     public PixelPoint? CursorPosition()
         => GetCursorPos(out var p) ? new PixelPoint(p.X, p.Y) : (PixelPoint?)null;
 
+    public void ScrollDown(PixelPoint at, int notches)
+    {
+        SetCursorPos(at.X, at.Y);
+        mouse_event(MOUSEEVENTF_WHEEL, 0, 0, unchecked((uint)(-120 * notches)), UIntPtr.Zero);
+    }
+
+    const uint MOUSEEVENTF_WHEEL = 0x0800;
     [StructLayout(LayoutKind.Sequential)] struct POINT { public int X, Y; }
     [DllImport("user32.dll")] static extern bool GetCursorPos(out POINT p);
+    [DllImport("user32.dll")] static extern bool SetCursorPos(int x, int y);
+    [DllImport("user32.dll")] static extern void mouse_event(uint flags, int dx, int dy, uint data, UIntPtr extra);
 
     private sealed class HotkeyHook : IDisposable
     {

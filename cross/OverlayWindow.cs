@@ -34,6 +34,7 @@ public sealed class OverlayWindow : Window
 
         var textLayer = new Canvas { Cursor = OverlayControl.CurHidden };
         _control = new OverlayControl(shot, Close, Copy) { TextLayer = textLayer };
+        _control.OnLongShot = OnLongShot;
         var grid = new Grid();
         grid.Children.Add(_control);
         grid.Children.Add(textLayer);
@@ -43,6 +44,21 @@ public sealed class OverlayWindow : Window
     void Copy(SKImage image)
     {
         try { Platform.PlatformServices.Current.CopyImageToClipboard(image); } catch { }
+    }
+
+    // 长截图：把选区换算成屏幕物理区域，关掉遮罩，后台跑滚动截取
+    void OnLongShot(SKBitmap frame0, SKRect selDip)
+    {
+        double scale = _control.Bounds.Width > 0 ? _bounds.Width / _control.Bounds.Width : 1;
+        var region = new PixelRect(
+            _bounds.X + (int)(selDip.Left * scale),
+            _bounds.Y + (int)(selDip.Top * scale),
+            Math.Max(1, (int)(selDip.Width * scale)),
+            Math.Max(1, (int)(selDip.Height * scale)));
+        Close();
+        Avalonia.Threading.Dispatcher.UIThread.Post(
+            async () => { try { await LongShot.Run(region, frame0); } catch { } },
+            Avalonia.Threading.DispatcherPriority.Background);
     }
 
     protected override void OnOpened(EventArgs e)

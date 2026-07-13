@@ -23,4 +23,7 @@ public interface IPlatformServices
 
     /// <summary>当前鼠标位置（屏幕物理像素）；拿不到则返回 null。</summary>
     PixelPoint? CursorPosition();
+
+    /// <summary>在指定屏幕点向下滚动 notches 格（长截图用）。</summary>
+    void ScrollDown(PixelPoint at, int notches);
 }

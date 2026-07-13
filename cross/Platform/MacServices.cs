@@ -70,6 +70,25 @@ public sealed class MacServices : IPlatformServices
     }
 
     public Avalonia.PixelPoint? CursorPosition() => null;
+
+    public void ScrollDown(Avalonia.PixelPoint at, int notches)
+    {
+        try
+        {
+            CGWarpMouseCursorPosition(new CGPoint { x = at.X, y = at.Y });
+            var e = CGEventCreateScrollWheelEvent(IntPtr.Zero, 1, 1, -notches); // line units
+            if (e != IntPtr.Zero) { CGEventPost(0, e); CFRelease(e); }
+        }
+        catch { }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct CGPoint { public double x, y; }
+    const string AS = "/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices";
+    [DllImport(AS)] static extern IntPtr CGEventCreateScrollWheelEvent(IntPtr src, int units, uint count, int wheel1);
+    [DllImport(AS)] static extern void CGEventPost(uint tap, IntPtr evt);
+    [DllImport(AS)] static extern int CGWarpMouseCursorPosition(CGPoint p);
+    [DllImport("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")] static extern void CFRelease(IntPtr o);
 }
 
 /// <summary>用 Carbon RegisterEventHotKey 注册全局热键 Option+A(=Alt+A)。
