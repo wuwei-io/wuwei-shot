@@ -58,12 +58,9 @@ public sealed class MacServices : IPlatformServices
 
     public void CopyImageToClipboard(SKImage image)
     {
-        string tmp = Path.Combine(Path.GetTempPath(), "altsnip_copy.png");
-        using (var data = image.Encode(SKEncodedImageFormat.Png, 100))
-        using (var fs = File.Create(tmp))
-            data.SaveTo(fs);
-        Proc.Run("/usr/bin/osascript", "-e",
-                 $"set the clipboard to (read (POSIX file \"{tmp}\") as «class PNGf»)");
+        // 进程内 NSPasteboard 写图，替代 osascript 子进程——消除首次点对号时 osascript 冷启动的卡顿
+        using var data = image.Encode(SKEncodedImageFormat.Png, 100);
+        MacClipboard.SetPng(data.ToArray());
     }
 
     public IDisposable? RegisterHotkey(Action onAltA)
@@ -142,5 +139,42 @@ internal static class MacHotKey
             if (_handlerRef != IntPtr.Zero) { RemoveEventHandler(_handlerRef); _handlerRef = IntPtr.Zero; }
             _cb = null; _proc = null;
         }
+    }
+}
+
+/// <summary>进程内写图片到剪贴板（NSPasteboard）——避免 osascript 子进程冷启动卡顿。</summary>
+internal static class MacClipboard
+{
+    const string Objc = "/usr/lib/libobjc.dylib";
+    const string CF = "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation";
+    const uint kCFStringEncodingUTF8 = 0x08000100;
+
+    [DllImport(Objc)] static extern IntPtr objc_getClass(string s);
+    [DllImport(Objc)] static extern IntPtr sel_registerName(string s);
+    [DllImport(Objc, EntryPoint = "objc_msgSend")] static extern IntPtr Msg(IntPtr r, IntPtr sel);
+    [DllImport(Objc, EntryPoint = "objc_msgSend")] static extern IntPtr Msg_PL(IntPtr r, IntPtr sel, IntPtr p, ulong len);
+    [DllImport(Objc, EntryPoint = "objc_msgSend")] static extern IntPtr Msg_PP(IntPtr r, IntPtr sel, IntPtr a, IntPtr b);
+    [DllImport(CF)] static extern IntPtr CFStringCreateWithCString(IntPtr alloc, string s, uint enc);
+
+    public static void SetPng(byte[] png)
+    {
+        try
+        {
+            IntPtr nsdata;
+            var h = GCHandle.Alloc(png, GCHandleType.Pinned);
+            try
+            {
+                // [NSData dataWithBytes:length:] —— 复制一份，autoreleased
+                nsdata = Msg_PL(objc_getClass("NSData"), sel_registerName("dataWithBytes:length:"),
+                                h.AddrOfPinnedObject(), (ulong)png.Length);
+            }
+            finally { h.Free(); }
+            if (nsdata == IntPtr.Zero) return;
+            var pb = Msg(objc_getClass("NSPasteboard"), sel_registerName("generalPasteboard"));
+            Msg(pb, sel_registerName("clearContents"));
+            var type = CFStringCreateWithCString(IntPtr.Zero, "public.png", kCFStringEncodingUTF8); // 与 NSString 免费桥接
+            Msg_PP(pb, sel_registerName("setData:forType:"), nsdata, type);
+        }
+        catch { }
     }
 }
