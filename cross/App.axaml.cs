@@ -35,6 +35,8 @@ public partial class App : Application
             _host.Show();
 
             SetupTray();
+            // macOS：不在 Dock 显示图标，只保留菜单栏托盘图标（后台常驻）
+            if (OperatingSystem.IsMacOS()) Platform.MacWindow.HideDockIcon();
             try { _hotkey = PlatformServices.Current.RegisterHotkey(Capture); } catch { }
 
             // 隐藏自测：启动即触发一次截图，便于开发时验证覆盖层
@@ -52,11 +54,13 @@ public partial class App : Application
 
     private void SetupTray()
     {
-        var tray = new TrayIcon { ToolTipText = "AltSnip — Alt+A to capture", Icon = LoadIcon() };
+        // macOS 全局热键是 Ctrl+Option+A（避开微信占用的 Option+A）；其它平台是 Alt+A
+        string hk = OperatingSystem.IsMacOS() ? "⌃⌥A" : "Alt+A";
+        var tray = new TrayIcon { ToolTipText = $"AltSnip — {hk} to capture", Icon = LoadIcon() };
         tray.Clicked += (_, _) => Capture();
 
         var menu = new NativeMenu();
-        var cap = new NativeMenuItem("Capture (Alt+A)");
+        var cap = new NativeMenuItem($"Capture ({hk})");
         cap.Click += (_, _) => Capture();
         var quit = new NativeMenuItem("Quit");
         quit.Click += (_, _) => Shutdown();
@@ -90,7 +94,7 @@ public partial class App : Application
                          ?? _host.Screens.Primary ?? all[0];
             var bounds = screen.Bounds;
             var shot = PlatformServices.Current.CaptureRegion(bounds);
-            var win = new OverlayWindow(shot, bounds);
+            var win = new OverlayWindow(shot, bounds, screen.Scaling);
             win.Closed += (_, _) => _capturing = false;
             win.Show();
             win.Activate();
