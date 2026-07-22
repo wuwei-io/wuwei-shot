@@ -214,8 +214,18 @@ internal sealed class DimWindow : Window
         base.OnOpened(e);
         // 用物理像素强制窗口 = 目标屏矩形，绕开 Avalonia 的 DPI 定位误差 →
         // 蒙层严丝合缝盖满整屏，不再顶部/左侧漏一条。
-        WinOverlay.ApplyRect(TryGetPlatformHandle()?.Handle ?? IntPtr.Zero, clickThrough: true,
+        var h = TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+        WinOverlay.ApplyRect(h, clickThrough: true,
             _screenPx.X, _screenPx.Y, _screenPx.Width, _screenPx.Height);
+        // 蒙层铺满后，把洞区精确裁回目标尺寸，避免 bleed 外沿被强设物理矩形后变成黑边
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (h != IntPtr.Zero)
+            {
+                WinOverlay.ApplyRect(h, clickThrough: true,
+                    _screenPx.X, _screenPx.Y, _screenPx.Width, _screenPx.Height);
+            }
+        }, DispatcherPriority.Background);
     }
 }
 
@@ -301,17 +311,19 @@ internal sealed class ControlWindow : Window
         var ok = IconButton("✓", Color.FromRgb(0x0E, 0x11, 0x14), Color.FromRgb(0x5C, 0x8A, 0x73));
         ok.Click += (_, _) => onOk();
 
-        // 不透明深色控件条：即便 z-order 有变数，按钮也绝不透出底下的暗蒙层
+        // 控件条：不透明深色底 + 固定尺寸，避免 DPI/字体度量差异导致布局抖动
         Content = new Border
         {
             Background = new SolidColorBrush(Color.FromRgb(0x16, 0x19, 0x1E)),
             CornerRadius = new CornerRadius(7),
             Padding = new Thickness(4, 3),
+            Width = 88,
+            Height = 34,
             Child = new StackPanel
             {
                 Orientation = Orientation.Horizontal,
                 Spacing = 8,
-                HorizontalAlignment = HorizontalAlignment.Right,
+                HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
                 Children = { no, ok },
             },
@@ -322,11 +334,12 @@ internal sealed class ControlWindow : Window
     static Button IconButton(string glyph, Color fg, Color bg) => new()
     {
         Content = glyph,
-        Width = 38, Height = 28,
+        Width = 36, Height = 26,
         Foreground = new SolidColorBrush(fg),
         Background = new SolidColorBrush(bg),
-        FontSize = 14, FontWeight = FontWeight.Bold,
-        CornerRadius = new CornerRadius(5),   // 矩形简洁按钮（非圆形）
+        FontSize = 13,
+        FontWeight = FontWeight.Bold,
+        CornerRadius = new CornerRadius(5),
         HorizontalContentAlignment = HorizontalAlignment.Center,
         VerticalContentAlignment = VerticalAlignment.Center,
         BorderThickness = new Thickness(0),
