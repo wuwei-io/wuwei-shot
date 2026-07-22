@@ -47,4 +47,15 @@ public static class WinOverlay
     static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
     [DllImport("user32.dll")]
     static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
+
+    // 读原生窗口真实矩形（物理像素）——诊断用
+    public static (int w, int h) NativeSize(IntPtr hwnd)
+    {
+        if (!OperatingSystem.IsWindows() || hwnd == IntPtr.Zero) return (-1, -1);
+        return GetWindowRect(hwnd, out var r) ? (r.Right - r.Left, r.Bottom - r.Top) : (-2, -2);
+    }
+    [StructLayout(LayoutKind.Sequential)]
+    struct RECT { public int Left, Top, Right, Bottom; }
+    [DllImport("user32.dll")]
+    static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
 }
