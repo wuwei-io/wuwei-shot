@@ -1,4 +1,8 @@
 using System;
+using System.IO;
+using System.Net;
+using System.Text;
+using System.Threading.Tasks;
 using WuweiShot.Platform;
 using Avalonia;
 using Avalonia.Controls;
@@ -95,14 +99,98 @@ public partial class App : Application
         var menu = new NativeMenu();
         var cap = new NativeMenuItem($"Capture ({hk})");
         cap.Click += (_, _) => Capture();
+        // 账号状态：已登录显示 email（禁点），未登录显示登录入口
+        var email = ReadLoggedInEmail();
+        NativeMenuItem acct;
+        if (email != null)
+        {
+            acct = new NativeMenuItem($"账号: {email}") { IsEnabled = false };
+        }
+        else
+        {
+            acct = new NativeMenuItem("登录账号 ↗");
+            acct.Click += async (_, _) => await LoginAsync();
+        }
         var quit = new NativeMenuItem("Quit");
         quit.Click += (_, _) => Shutdown();
         menu.Items.Add(cap);
+        menu.Items.Add(acct);
         menu.Items.Add(new NativeMenuItemSeparator());
         menu.Items.Add(quit);
         tray.Menu = menu;
 
         TrayIcon.SetIcons(this, new TrayIcons { tray });
+    }
+
+    private static string? ReadLoggedInEmail()
+    {
+        try
+        {
+            var path = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                ".wuwei", "auth.json");
+            if (!File.Exists(path)) return null;
+            using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+            if (doc.RootElement.TryGetProperty("email", out var e) && e.ValueKind == System.Text.Json.JsonValueKind.String)
+                return e.GetString();
+        }
+        catch { }
+        return null;
+    }
+
+    private async Task LoginAsync()
+    {
+        // 找随机端口
+        int port;
+        using (var tmp = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0))
+        { tmp.Start(); port = ((System.Net.IPEndPoint)tmp.LocalEndpoint).Port; tmp.Stop(); }
+
+        var state = Guid.NewGuid().ToString("N")[..8];
+        var loginUrl = $"https://wuweiai.io/auth/desktop?port={port}&state={state}";
+
+        // 打开浏览器
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+        { FileName = loginUrl, UseShellExecute = true });
+
+        // 启动 HttpListener 等回调
+        var listener = new System.Net.HttpListener();
+        listener.Prefixes.Add($"http://127.0.0.1:{port}/");
+        listener.Start();
+        try
+        {
+            using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromMinutes(5));
+            var ctx = await listener.GetContextAsync().WaitAsync(cts.Token);
+            var qs = ctx.Request.QueryString;
+            string html;
+            if (qs["state"] != state || string.IsNullOrEmpty(qs["access_token"]))
+            {
+                html = "<html><body style='background:#0B0E12;color:#F4F6F8;display:flex;align-items:center;justify-content:center;height:100vh;font-family:system-ui'><div style='text-align:center'><h2>❌ 登录失败</h2><p>state 校验失败或未获取到 token</p></div></body></html>";
+                ctx.Response.StatusCode = 400;
+            }
+            else
+            {
+                html = "<html><body style='background:#0B0E12;color:#F4F6F8;display:flex;align-items:center;justify-content:center;height:100vh;font-family:system-ui'><div style='text-align:center'><h2>✅ 登录成功</h2><p>请回到无为截，本页可关闭</p></div></body></html>";
+                ctx.Response.StatusCode = 200;
+                // 写 auth.json
+                var authDir = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".wuwei");
+                System.IO.Directory.CreateDirectory(authDir);
+                long exp = 0; long.TryParse(qs["expires_at"], out exp);
+                var json = System.Text.Json.JsonSerializer.Serialize(new {
+                    access_token = qs["access_token"],
+                    refresh_token = qs["refresh_token"] ?? "",
+                    expires_at = exp,
+                    email = qs["email"]
+                }, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+                System.IO.File.WriteAllText(System.IO.Path.Combine(authDir, "auth.json"), json);
+            }
+            var bytes = System.Text.Encoding.UTF8.GetBytes(html);
+            ctx.Response.ContentType = "text/html; charset=utf-8";
+            ctx.Response.ContentLength64 = bytes.Length;
+            await ctx.Response.OutputStream.WriteAsync(bytes);
+            ctx.Response.OutputStream.Close();
+        }
+        catch { /* 超时或取消，忽略 */ }
+        finally { listener.Stop(); }
     }
 
     private void Shutdown()

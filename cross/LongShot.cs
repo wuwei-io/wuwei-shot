@@ -59,6 +59,7 @@ internal sealed class LongSession
     DateTime _lastPreview = DateTime.MinValue;
     double _prevW;      // 预览缩略图宽（DIP，固定）
     double _prevMaxH;   // 预览可用最大高（DIP，到屏底）
+    SKBitmap? _prevFrame;   // 上一帧，用于判断"没滚动就跳过"
 
     public LongSession(PixelRect region, SKBitmap frame0, double scale, PixelRect screen)
     {
@@ -133,9 +134,11 @@ internal sealed class LongSession
             {
                 SKBitmap f;
                 try { f = _plat.CaptureRegion(_region); } catch { return false; }
+                // 与上一帧几乎相同 = 没滚动 → 跳过，避免周期性重复内容误判成"新内容"导致无限增长
+                if (_prevFrame != null && Stitcher.NearlySame(_prevFrame, f)) { f.Dispose(); return false; }
                 bool c;
                 try { c = _acc.Feed(f); } catch { c = false; }
-                f.Dispose();
+                _prevFrame?.Dispose(); _prevFrame = f;   // 留作下次比较（f 的切片 Feed 已内部拷贝，可保留）
                 return c;
             });
             if (!_running) break;
@@ -266,6 +269,7 @@ internal sealed class LongSession
         try { _hint?.Close(); } catch { }
         try { _control?.Close(); } catch { }
         _dim = null; _preview = null; _hint = null; _control = null;
+        _prevFrame?.Dispose(); _prevFrame = null;
     }
 }
 

@@ -23,6 +23,28 @@ public static class Stitcher
         return g;
     }
 
+    /// <summary>两帧是否几乎相同（= 没滚动）。采样对比灰度，恒定成本。
+    /// 用于挡住"周期性重复内容"误匹配导致的静止时无限追加。</summary>
+    public static bool NearlySame(SKBitmap a, SKBitmap b)
+    {
+        if (a.Width != b.Width || a.Height != b.Height) return false;
+        int W = a.Width, H = a.Height, rb = a.RowBytes;
+        byte[] pa = a.Bytes, pb = b.Bytes;
+        long diff = 0, n = 0;
+        for (int y = 0; y < H; y += 4)
+        {
+            int row = y * rb;
+            for (int x = 0; x < W; x += 8)
+            {
+                int i = row + x * 4;
+                int d = (pa[i] - pb[i]) + (pa[i + 1] - pb[i + 1]) + (pa[i + 2] - pb[i + 2]);
+                diff += d < 0 ? -d : d;
+                n++;
+            }
+        }
+        return n > 0 && (double)diff / n < 6.0;   // 平均近乎为 0 = 静止
+    }
+
     /// <summary>在 f 中找"新内容起始行"；返回 f.Height 表示没有可靠的新内容（到底/失配）。</summary>
     public static int FindNewStart(SKBitmap acc, SKBitmap f)
     {
